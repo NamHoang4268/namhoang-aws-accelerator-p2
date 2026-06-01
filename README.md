@@ -4,7 +4,7 @@ Portfolio cá nhân — XBrain AWS Accelerator Phase 2
 
 **Học viên:** Ngo Kim Hoang Nam  
 **Team:** CD08  
-**Track:** Cloud/DevOps
+**Track:** DevOps
 
 ---
 
