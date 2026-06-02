@@ -9,6 +9,7 @@ Infrastructure as Code (IaC) là cách quản lý và provisioning hạ tầng t
 Trước đây (manual): click AWS Console, dễ sai sót, không version control, khó reproduce.
 
 Terraform giải quyết:
+
 - **Reproducible** — cùng config chạy ở đâu cũng ra kết quả giống nhau
 - **Version control** — hạ tầng được track bằng Git như code thông thường
 - **Automation** — tích hợp vào CI/CD pipeline, không cần người ngồi click
@@ -86,11 +87,11 @@ resource "aws_s3_bucket" "demo" {
 }
 ```
 
-| Khái niệm | Giá trị | Dùng ở đâu |
-|-----------|---------|------------|
-| Resource address | `aws_s3_bucket.demo` | Trong Terraform (reference, CLI, state) |
-| Local name | `demo` | Chỉ trong code Terraform |
-| Resource ID (AWS) | `namhoang-tf-demo-a3f2c1b0` | Gọi AWS API, hiển thị trên Console |
+| Khái niệm         | Giá trị                     | Dùng ở đâu                              |
+| ----------------- | --------------------------- | --------------------------------------- |
+| Resource address  | `aws_s3_bucket.demo`        | Trong Terraform (reference, CLI, state) |
+| Local name        | `demo`                      | Chỉ trong code Terraform                |
+| Resource ID (AWS) | `namhoang-tf-demo-a3f2c1b0` | Gọi AWS API, hiển thị trên Console      |
 
 `demo` không phải tên trên AWS — chỉ là tên nội bộ trong Terraform.
 
@@ -101,6 +102,7 @@ resource "aws_s3_bucket" "demo" {
 `terraform.tfstate` lưu trạng thái thực tế của hạ tầng. Terraform dùng nó để tính diff trong lần apply tiếp theo.
 
 State chứa:
+
 - **Resource address** — `aws_s3_bucket.demo`
 - **Resource ID** — ID thật trên AWS (dùng để map với resource thật)
 - **Attributes** — toàn bộ config + computed values (ARN, domain name...)
@@ -124,6 +126,7 @@ terraform destroy # xóa toàn bộ resources
 ```
 
 **Đọc plan output:**
+
 - `+` (xanh) — resource sẽ được **tạo mới**
 - `~` (vàng) — resource sẽ được **cập nhật**
 - `-` (đỏ) — resource sẽ bị **xóa**
@@ -159,3 +162,83 @@ Luôn đọc kỹ plan trước apply, đặc biệt chú ý `-/+`.
 - Modules giúp tái sử dụng code ra sao?
 - Workspace dùng để quản lý multi-environment (dev/staging/prod) như thế nào?
 - `terraform import` dùng khi nào — khi resource đã tồn tại trên AWS nhưng chưa có trong state?
+
+---
+
+## Day B — Kubernetes Container/Orchestration
+
+### Tại sao cần Kubernetes?
+
+Container giải quyết vấn đề "chạy ở đâu cũng được", nhưng khi có nhiều container thì cần orchestration:
+
+- Container crash → tự restart thế nào?
+- Scale up khi traffic tăng?
+- Distribute traffic giữa nhiều container?
+
+Kubernetes (K8s) là hệ thống orchestration tự động hóa deploy, scale, và quản lý container.
+
+### Pod
+
+Đơn vị nhỏ nhất trong K8s — wrapper bọc quanh một hoặc nhiều container. K8s không quản lý container trực tiếp mà quản lý Pod.
+
+Mỗi Pod có IP riêng trong cluster, nhưng IP này thay đổi mỗi khi Pod restart → cần Service để có endpoint ổn định.
+
+### Service
+
+Abstraction layer tạo endpoint ổn định trỏ tới Pod. 3 loại chính:
+
+- **ClusterIP** — chỉ accessible trong cluster (default)
+- **NodePort** — expose qua port trên node (30000–32767)
+- **LoadBalancer** — tạo LB ở cloud provider
+
+Service dùng `selector` với labels để tìm đúng Pod cần route traffic tới.
+
+### Deployment
+
+Quản lý Pod tự động:
+
+- Khai báo số `replicas` mong muốn
+- **Self-healing**: Pod crash → tự tạo Pod mới thay thế ngay lập tức
+- Hỗ trợ rolling update
+
+Thực tế: xóa 1 Pod trong Deployment → Pod mới được tạo trong vài giây.
+
+### Probes (Health Checks)
+
+- **livenessProbe** — K8s kiểm tra container còn sống không. Fail → restart container
+- **readinessProbe** — K8s kiểm tra container sẵn sàng nhận traffic chưa. Fail → bỏ Pod khỏi Service endpoint
+
+Cả hai đều chạy định kỳ (`periodSeconds`), có `initialDelaySeconds` để chờ app khởi động, và `#failure=3` — phải fail 3 lần liên tiếp mới trigger action.
+
+### ConfigMap & Secret
+
+- **ConfigMap** — lưu config non-sensitive dưới dạng key-value, inject vào Pod qua `envFrom` hoặc `env`
+- **Secret** — lưu sensitive data (password, token) dưới dạng base64. Được decode khi inject vào container — container thấy plaintext
+
+Tách config ra khỏi image giúp thay đổi config mà không cần build lại image.
+
+### NetworkPolicy
+
+Kiểm soát traffic giữa các Pod. Mặc định K8s cho phép mọi Pod nói chuyện với nhau — NetworkPolicy dùng `podSelector` và `policyTypes` để restrict.
+
+- `podSelector` — áp dụng policy cho Pod nào
+- `ingress` — kiểm soát traffic đi vào
+- `egress` — kiểm soát traffic đi ra
+
+### Những gì đã làm hôm nay
+
+| File                        | Nội dung                                   |
+| --------------------------- | ------------------------------------------ |
+| `01-pod.yaml`               | Pod nginx đơn giản                         |
+| `02-service.yaml`           | NodePort Service expose ra ngoài cluster   |
+| `03-deployment.yaml`        | Deployment 3 replicas + self-healing test  |
+| `04-deployment-probes.yaml` | Deployment với liveness + readiness probes |
+| `05-configmap-secret.yaml`  | ConfigMap + Secret inject vào env vars     |
+| `06-networkpolicy.yaml`     | NetworkPolicy giới hạn ingress theo label  |
+
+### Câu hỏi còn mở
+
+- HorizontalPodAutoscaler (HPA) scale tự động dựa trên CPU/memory thế nào?
+- Ingress Controller khác NodePort thế nào?
+- StatefulSet dùng khi nào thay vì Deployment?
+- NetworkPolicy enforcement thực tế cần CNI nào?
