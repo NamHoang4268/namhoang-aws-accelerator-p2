@@ -12,14 +12,14 @@ variable "project_name" {
 
 variable "environment" {
   description = "Deployment environment"
-  type        = string 
+  type        = string
   default     = "dev"
 }
 
 variable "owner" {
   description = "Owner email"
   type        = string
-  default     = "ngokhoangnam4268@gmail.com"  
+  default     = "ngokhoangnam4268@gmail.com"
 }
 
 variable "team" {

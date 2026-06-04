@@ -57,22 +57,7 @@ resource "tls_private_key" "ssh" {
 resource "local_sensitive_file" "private_key" {
   content         = tls_private_key.ssh.private_key_pem
   filename        = "${path.module}/k8s-host.pem"
-  file_permission = "0644"
-}
-
-# Fix Windows SSH key permissions automatically (icacls strips inherited ACLs,
-# leaving only the current user with Read access — required by OpenSSH on Windows)
-resource "null_resource" "fix_pem_permissions" {
-  depends_on = [local_sensitive_file.private_key]
-
-  triggers = {
-    pem_content = tls_private_key.ssh.private_key_pem
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["PowerShell", "-Command"]
-    command     = "icacls '${path.module}/k8s-host.pem' /inheritance:r /grant:r \"$($env:USERNAME):R\""
-  }
+  file_permission = "0600"
 }
 
 
