@@ -40,6 +40,38 @@ Internet
 VPC: 10.0.0.0/16 │ 2 public subnets (us-east-1a, us-east-1b)
 ```
 
+> **💡 Đọc hiểu Sơ đồ Kiến trúc:**
+>
+> - **Tầng 1 (Internet → ALB):** Load Balancer nằm ngoài cùng, hứng traffic từ người dùng ở port 80, sau đó chỉ đường đẩy luồng traffic này xuống port 30080 của con máy ảo EC2.
+> - **Tầng 2 (EC2 → `socat`):** Trạm trung chuyển. EC2 nhận traffic ở port 30080. Vì K8s node (Minikube) thực chất là một container Docker bị cô lập mạng bên trong EC2, nên ta cài một tool nhỏ tên là `socat` đóng vai trò "ống nước" hút traffic từ host EC2 đẩy thẳng vào IP của Minikube.
+> - **Tầng 3 (Minikube → Pods):** Đích đến cuối. K8s Service dạng NodePort nhận traffic ở cổng 30080 và giao cho các Nginx Pods để trả về trang web hiển thị.
+
+---
+
+## 🚀 Execution Flow (Luồng chạy chi tiết khi gõ `terraform apply`)
+
+1. **Khởi tạo Mạng (Networking & Security):**
+    - Terraform tạo VPC, 2 Subnets (us-east-1a, us-east-1b), Internet Gateway và Route Table để mở kết nối internet.
+    - Tạo 2 Security Groups: một cho ALB (mở port 80 cho public), một cho EC2 (mở port 30080 chỉ nhận traffic từ ALB, và port 22/8443 để Terraform SSH vào verify).
+
+2. **Cấu hình Load Balancer (ALB):**
+    - Tạo Application Load Balancer rải trên 2 subnet (đáp ứng điều kiện bắt buộc của AWS, dù ta chỉ chạy 1 EC2 ở subnet 1, subnet 2 để trống không tốn phí).
+    - Tạo Target Group và Listener để hứng traffic từ port 80 và trỏ đích vào EC2 ở port 30080.
+
+3. **Tạo Máy chủ & Tự động cài đặt (EC2 + Bootstrap):**
+    - Tạo khóa RSA và tự động lưu file `k8s-host.pem` xuống máy local.
+    - Tạo EC2 (`t3.medium`) nằm trong Subnet 1.
+    - EC2 khởi động và chạy ngầm file `scripts/user_data.sh`. File này làm nhiệm vụ: Cài Docker → Cài Minikube → Tạo Pod Nginx → Tạo file HTML → Bật port forward bằng `socat`.
+    - Ngay khi script cài xong K8s, nó tạo ra một file rỗng `/tmp/bootstrap_done` để làm "lá cờ" báo hiệu.
+
+4. **Kiểm tra và Xác nhận (Verify bằng Polling):**
+    - Dùng `time_sleep` bắt Terraform chờ 90 giây để hệ điều hành Ubuntu bên trong EC2 khởi động xong dịch vụ SSH.
+    - Hết 90 giây, `null_resource` tự động SSH vào EC2, chạy vòng lặp 15 giây/lần để tìm "lá cờ" `/tmp/bootstrap_done` (Cơ chế Polling).
+    - Thấy cờ xuất hiện → K8s đã sẵn sàng. Terraform chạy các lệnh `kubectl` kiểm tra Node/Pod và in kết quả thành công lên terminal.
+
+5. **Kết thúc (Outputs):**
+    - Terraform in ra đường link URL của ALB. Người dùng chỉ việc click vào là thấy trang web, hoàn thành quy trình 1-click thực thụ!
+
 ---
 
 ## Providers Used (≥2 requirement satisfied with 5)
@@ -87,6 +119,13 @@ null_resource (fix_pem_permissions)               │
                             ▼
                       DONE: output ALB URL
 ```
+
+> **💡 Đọc hiểu cách nối (wire) Providers:**
+>
+> 1. Trụ cột đầu tiên là provider **`tls`**: Bắt buộc phải chạy trước tiên để đúc ra bộ khóa SSH.
+> 2. Sau đó nó chia 2 ngả: Đưa Public Key cho provider **`aws`** (để khóa cửa máy ảo EC2), đồng thời đưa Private Key cho provider **`local`** (để lưu thành file `.pem` dưới laptop của bạn).
+> 3. Trong lúc đó, EC2 (nhờ provider `aws`) đang tự động chạy kịch bản `user_data.sh` ngầm để cài K8s.
+> 4. Cuối cùng, các luồng đều chụm lại ở chốt chặn: **`time_sleep`** (chờ 90 giây cho cửa SSH của EC2 mở) và **`null_resource`** (cầm đúng cái file `.pem` vừa tạo, SSH vào trong EC2 để xác nhận `user_data.sh` đã cài xong K8s chưa). Mọi thứ êm xuôi thì Terraform mới báo thành công!
 
 ---
 

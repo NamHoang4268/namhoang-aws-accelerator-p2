@@ -2,8 +2,8 @@
 
 Portfolio cá nhân — XBrain AWS Accelerator Phase 2
 
-**Học viên:** Ngo Kim Hoang Nam  
-**Team:** CD08  
+**Học viên:** Ngo Kim Hoang Nam
+**Team:** CD08
 **Track:** DevOps
 
 ---
@@ -40,12 +40,12 @@ capstone/
 
 ## Stack
 
-| Công nghệ | Mục đích |
-|-----------|----------|
-| Terraform | IaC — provisioning AWS resources |
-| Kubernetes / minikube | Container orchestration |
-| AWS (S3, EC2, EKS...) | Cloud provider |
-| GitHub Actions | CI/CD (W9+) |
+| Công nghệ             | Mục đích                         |
+| --------------------- | -------------------------------- |
+| Terraform             | IaC — provisioning AWS resources |
+| Kubernetes / minikube | Container orchestration          |
+| AWS (S3, EC2, EKS...) | Cloud provider                   |
+| GitHub Actions        | CI/CD (W9+)                      |
 
 ---
 
