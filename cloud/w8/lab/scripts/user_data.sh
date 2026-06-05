@@ -137,10 +137,31 @@ EOF
 
 K8S_DEPLOY
 
-echo "=== [6.5/7] Setup socat port forwarding ==="
+echo "=== [6.5/7] Setup socat port forwarding via systemd ==="
 apt-get install -y socat
 MINIKUBE_IP=$(sudo -u ubuntu minikube ip)
-nohup socat TCP-LISTEN:30080,fork,reuseaddr TCP:${MINIKUBE_IP}:30080 > /var/log/socat.log 2>&1 &
+
+# Write systemd unit file — Restart=always ensures socat auto-recovers if it crashes
+cat <<EOF > /etc/systemd/system/socat-k8s.service
+[Unit]
+Description=Socat Port Forwarding EC2:30080 -> Minikube NodePort:30080
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/socat TCP-LISTEN:30080,fork,reuseaddr TCP:${MINIKUBE_IP}:30080
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/socat.log
+StandardError=append:/var/log/socat.log
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now socat-k8s.service
+echo "socat-k8s service status: $(systemctl is-active socat-k8s.service)"
 
 echo "=== [7/7] Create service account for Terraform K8s provider ==="
 sudo -u ubuntu bash << 'SA_SETUP'
