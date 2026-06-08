@@ -47,7 +47,55 @@ GitOps:    Developer → git push → ArgoCD → Cluster
 
 ## Day B — Observability: SLO/SLI/OTel
 
-_(sẽ cập nhật sau khi hoàn thành)_
+### Những gì đã làm
+
+- Cài **Prometheus + Grafana + Alertmanager** vào minikube qua Helm (`kube-prometheus-stack`)
+- Cài **Loki + Promtail** vào namespace `monitoring`
+- Viết **OTel Collector config** (`day-b/otel/collector-config.yaml`) — pipeline: receivers → processors → exporters
+- Viết **Prometheus alert rules** (`day-b/alert-rules/slo-alert-rules.yaml`) — multi-window burn rate alert (fast 1h×5min, slow 6h×30min) cho availability và latency SLO
+- Tạo **Grafana dashboard JSON** (`day-b/dashboards/slo-dashboard.json`) — SLO overview, error rate multi-window, latency percentiles, burn rate gauges
+- Apply `PrometheusRule` vào cluster, verify bằng `kubectl get prometheusrule -n monitoring`
+
+### Concepts nắm được
+
+**Observability vs Monitoring:**
+
+- Monitoring = WHEN (biết khi nào có vấn đề)
+- Observability = WHY (hiểu tại sao có vấn đề)
+- 3 Pillars: Metrics (Prometheus), Logs (Loki), Traces (Jaeger)
+
+**OTel SDK vs Collector:**
+
+- SDK = library trong app, tạo telemetry data
+- Collector = standalone process, nhận từ nhiều app, route tới nhiều backend
+- Tách app khỏi vendor → đổi backend chỉ sửa Collector config
+
+**SLI → SLO → SLA:**
+
+- SLI = metric thực tế đo được
+- SLO = target nội bộ team đặt (99.5% availability)
+- SLA = hợp đồng với khách hàng
+- Error budget = 1 - SLO = 0.5% = 216 phút/tháng
+
+**Multi-window burn rate:**
+
+- Burn rate = tốc độ tiêu error budget
+- Fast alert (critical): 1h + 5min windows, threshold 14.4× → budget cạn trong 2h
+- Slow alert (warning): 6h + 30min windows, threshold 6× → budget cạn trong 5 ngày
+- Multi-window giảm false positive (spike ngắn) và detect chậm cùng lúc
+
+### Vấn đề gặp phải
+
+- Prometheus + Grafana mất ~10 phút để pull image lần đầu (image nặng)
+- `kubectl port-forward` từ Ubuntu WSL không ổn định với Windows browser → cần sync kubeconfig + copy `.minikube` certs
+- `PrometheusRule` apply timeout → do kubeconfig stale, sync lại là OK
+- `loki-0` restart nhiều lần (RESTARTS: 15) — bình thường trên minikube do resource constraint
+
+### Câu hỏi còn mở
+
+- Khi app thực sự instrument bằng OTel SDK, trace được gửi qua Collector thế nào? Correlation giữa trace ID và log?
+- Prometheus retention 24h — production thì lưu bao lâu, dùng Thanos/Cortex để extend?
+- Grafana alerting khác Alertmanager thế nào? Khi nào dùng cái nào?
 
 ## Day C — Progressive Delivery (Canary)
 
