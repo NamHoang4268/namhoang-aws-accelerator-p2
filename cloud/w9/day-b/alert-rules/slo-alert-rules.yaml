@@ -1,0 +1,185 @@
+# Prometheus Alert Rules — SLO-based Multi-Window Burn Rate
+#
+# SLO Target: 99.5% availability over 30 days
+# Error budget: 0.5% = 216 minutes/month có thể bị lỗi
+#
+# Multi-window burn rate alert strategy:
+# - Fast window (1h × 5min):  phát hiện sự cố nghiêm trọng nhanh
+# - Slow window (6h × 30min): phát hiện degradation kéo dài
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: hello-w9-slo-alerts
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack   # label này để Prometheus Operator pickup rule
+    release: prometheus
+spec:
+  groups:
+    # =========================================================
+    # GROUP 1: Availability SLO (99.5%)
+    # SLI = good_requests / total_requests
+    # =========================================================
+    - name: hello-w9.availability.slo
+      interval: 30s
+      rules:
+        # --- Recording rules: tính sẵn các tỉ lệ lỗi để dùng trong alert ---
+
+        # Tỉ lệ lỗi trong 5 phút qua
+        - record: job:hello_w9_error_rate:ratio_rate5m
+          expr: |
+            sum(rate(http_requests_total{job="hello-w9", status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="hello-w9"}[5m]))
+
+        # Tỉ lệ lỗi trong 30 phút qua
+        - record: job:hello_w9_error_rate:ratio_rate30m
+          expr: |
+            sum(rate(http_requests_total{job="hello-w9", status=~"5.."}[30m]))
+            /
+            sum(rate(http_requests_total{job="hello-w9"}[30m]))
+
+        # Tỉ lệ lỗi trong 1 giờ qua
+        - record: job:hello_w9_error_rate:ratio_rate1h
+          expr: |
+            sum(rate(http_requests_total{job="hello-w9", status=~"5.."}[1h]))
+            /
+            sum(rate(http_requests_total{job="hello-w9"}[1h]))
+
+        # Tỉ lệ lỗi trong 6 giờ qua
+        - record: job:hello_w9_error_rate:ratio_rate6h
+          expr: |
+            sum(rate(http_requests_total{job="hello-w9", status=~"5.."}[6h]))
+            /
+            sum(rate(http_requests_total{job="hello-w9"}[6h]))
+
+        # --- CRITICAL: Multi-window burn rate alert ---
+        # Fast: 1h window + 5min window
+        # Burn rate > 14.4× = sẽ cạn hết error budget trong < 2 giờ
+        # (14.4 = 1 / (1 - 0.995) / (1h / 720h_per_month))
+        - alert: HelloW9AvailabilitySLOBurnRateCritical
+          expr: |
+            (
+              job:hello_w9_error_rate:ratio_rate1h > (14.4 * 0.005)
+            )
+            and
+            (
+              job:hello_w9_error_rate:ratio_rate5m > (14.4 * 0.005)
+            )
+          for: 2m
+          labels:
+            severity: critical
+            slo: availability
+            window: fast
+          annotations:
+            summary: "CRITICAL: Hello-W9 đang burn error budget với tốc độ cao"
+            description: |
+              Error rate trong 1h: {{ $value | humanizePercentage }}
+              Burn rate: ~14.4× — error budget sẽ cạn trong < 2 giờ
+              SLO target: 99.5% availability
+            runbook_url: "https://github.com/NamHoang4268/namhoang-aws-accelerator-p2/blob/main/runbooks/availability-slo.md"
+
+        # Slow: 6h window + 30min window
+        # Burn rate > 6× = sẽ cạn hết error budget trong < 5 giờ
+        - alert: HelloW9AvailabilitySLOBurnRateWarning
+          expr: |
+            (
+              job:hello_w9_error_rate:ratio_rate6h > (6 * 0.005)
+            )
+            and
+            (
+              job:hello_w9_error_rate:ratio_rate30m > (6 * 0.005)
+            )
+          for: 15m
+          labels:
+            severity: warning
+            slo: availability
+            window: slow
+          annotations:
+            summary: "WARNING: Hello-W9 đang burn error budget với tốc độ vừa"
+            description: |
+              Error rate trong 6h: {{ $value | humanizePercentage }}
+              Burn rate: ~6× — error budget sẽ cạn trong < 5 giờ
+              SLO target: 99.5% availability
+
+    # =========================================================
+    # GROUP 2: Latency SLO (99.5% requests < 200ms)
+    # SLI = requests_under_200ms / total_requests
+    # =========================================================
+    - name: hello-w9.latency.slo
+      interval: 30s
+      rules:
+        # Tỉ lệ request VI PHẠM latency SLO (> 200ms) trong các windows
+        - record: job:hello_w9_latency_violation:ratio_rate5m
+          expr: |
+            sum(rate(http_request_duration_seconds_bucket{job="hello-w9", le="0.2"}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count{job="hello-w9"}[5m]))
+            # Đảo ngược: tỉ lệ requests CHẬM hơn 200ms
+            # = 1 - (requests dưới 200ms / total)
+
+        - record: job:hello_w9_latency_violation:ratio_rate30m
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="hello-w9", le="0.2"}[30m]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="hello-w9"}[30m]))
+            )
+
+        - record: job:hello_w9_latency_violation:ratio_rate1h
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="hello-w9", le="0.2"}[1h]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="hello-w9"}[1h]))
+            )
+
+        - record: job:hello_w9_latency_violation:ratio_rate6h
+          expr: |
+            1 - (
+              sum(rate(http_request_duration_seconds_bucket{job="hello-w9", le="0.2"}[6h]))
+              /
+              sum(rate(http_request_duration_seconds_count{job="hello-w9"}[6h]))
+            )
+
+        # Fast burn: latency SLO
+        - alert: HelloW9LatencySLOBurnRateCritical
+          expr: |
+            (
+              job:hello_w9_latency_violation:ratio_rate1h > (14.4 * 0.005)
+            )
+            and
+            (
+              job:hello_w9_latency_violation:ratio_rate5m > (14.4 * 0.005)
+            )
+          for: 2m
+          labels:
+            severity: critical
+            slo: latency
+            window: fast
+          annotations:
+            summary: "CRITICAL: Hello-W9 latency SLO đang bị vi phạm nghiêm trọng"
+            description: |
+              {{ $value | humanizePercentage }} requests đang chậm hơn 200ms
+              Burn rate: ~14.4× — latency error budget sẽ cạn trong < 2 giờ
+
+        # Slow burn: latency SLO
+        - alert: HelloW9LatencySLOBurnRateWarning
+          expr: |
+            (
+              job:hello_w9_latency_violation:ratio_rate6h > (6 * 0.005)
+            )
+            and
+            (
+              job:hello_w9_latency_violation:ratio_rate30m > (6 * 0.005)
+            )
+          for: 15m
+          labels:
+            severity: warning
+            slo: latency
+            window: slow
+          annotations:
+            summary: "WARNING: Hello-W9 latency đang degraded"
+            description: |
+              {{ $value | humanizePercentage }} requests đang chậm hơn 200ms trong 6h qua

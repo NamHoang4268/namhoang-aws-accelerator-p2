@@ -1,0 +1,219 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "annotations": {
+    "list": []
+  },
+  "description": "Hello-W9 SLO Dashboard — Availability + Latency",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "title": "SLO Overview",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 99},
+              {"color": "green", "value": 99.5}
+            ]
+          },
+          "unit": "percent",
+          "min": 98,
+          "max": 100
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1},
+      "id": 2,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}},
+      "title": "Availability SLO (30d)",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "(1 - job:hello_w9_error_rate:ratio_rate6h) * 100",
+          "legendFormat": "Availability %"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0},
+              {"color": "green", "value": 50}
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1},
+      "id": 3,
+      "title": "Error Budget Remaining",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "100 - (job:hello_w9_error_rate:ratio_rate6h / 0.005 * 100)",
+          "legendFormat": "Budget %"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2},
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "id": 4,
+      "title": "Error Rate (multi-window)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "job:hello_w9_error_rate:ratio_rate5m",
+          "legendFormat": "5m window"
+        },
+        {
+          "expr": "job:hello_w9_error_rate:ratio_rate30m",
+          "legendFormat": "30m window"
+        },
+        {
+          "expr": "job:hello_w9_error_rate:ratio_rate1h",
+          "legendFormat": "1h window"
+        },
+        {
+          "expr": "job:hello_w9_error_rate:ratio_rate6h",
+          "legendFormat": "6h window"
+        },
+        {
+          "expr": "0.005",
+          "legendFormat": "SLO threshold (0.5%)"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineWidth": 2},
+          "unit": "s"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "id": 5,
+      "title": "Request Latency Percentiles",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job='hello-w9'}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job='hello-w9'}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job='hello-w9'}[5m])) by (le))",
+          "legendFormat": "p99"
+        },
+        {
+          "expr": "0.2",
+          "legendFormat": "SLO threshold (200ms)"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13},
+      "id": 6,
+      "title": "Burn Rate",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 6},
+              {"color": "red", "value": 14.4}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 14},
+      "id": 7,
+      "title": "Burn Rate (1h) — Fast window",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "job:hello_w9_error_rate:ratio_rate1h / 0.005",
+          "legendFormat": "Burn Rate"
+        }
+      ]
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 6},
+              {"color": "red", "value": 14.4}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 14},
+      "id": 8,
+      "title": "Burn Rate (6h) — Slow window",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "job:hello_w9_error_rate:ratio_rate6h / 0.005",
+          "legendFormat": "Burn Rate"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["slo", "hello-w9", "observability"],
+  "time": {"from": "now-3h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Hello-W9 SLO Dashboard",
+  "uid": "hello-w9-slo",
+  "version": 1
+}

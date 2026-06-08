@@ -1,0 +1,104 @@
+# OpenTelemetry Collector Configuration
+# Pipeline: Receivers → Processors → Exporters
+#
+# Vai trò:
+# - Receivers: nhận telemetry data từ app (SDK gửi lên)
+# - Processors: xử lý, filter, batch data
+# - Exporters: gửi data tới Prometheus, Loki, Jaeger...
+
+receivers:
+  # OTLP receiver — nhận data từ OTel SDK trong app
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317   # app gửi metrics/traces tới đây qua gRPC
+      http:
+        endpoint: 0.0.0.0:4318   # hoặc qua HTTP
+
+  # Prometheus receiver — scrape metrics từ app endpoint
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'hello-w9-app'
+          static_configs:
+            - targets: ['hello-w9-service.hello-w9.svc.cluster.local:8080']
+          metrics_path: /metrics
+          scrape_interval: 15s
+
+processors:
+  # Batch processor — gom nhiều data points thành 1 batch trước khi export
+  # Giảm số lượng API calls, tăng throughput
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+
+  # Memory limiter — tránh OOM khi data quá nhiều
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Resource processor — thêm metadata vào mọi telemetry signal
+  resource:
+    attributes:
+      - key: service.name
+        value: hello-w9
+        action: upsert
+      - key: environment
+        value: dev
+        action: upsert
+      - key: team
+        value: CD08
+        action: upsert
+
+exporters:
+  # Prometheus exporter — expose metrics endpoint để Prometheus scrape
+  prometheus:
+    endpoint: "0.0.0.0:8889"   # Prometheus scrape từ đây
+
+  # Loki exporter — gửi logs tới Loki
+  loki:
+    endpoint: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+    labels:
+      resource:
+        service.name: "service_name"
+        environment: "environment"
+
+  # Debug exporter — in ra stdout để debug (chỉ dùng trong dev)
+  debug:
+    verbosity: detailed
+
+  # OTLP exporter — forward tới backend khác (ví dụ Jaeger cho tracing)
+  otlp/jaeger:
+    endpoint: jaeger-collector.monitoring.svc.cluster.local:4317
+    tls:
+      insecure: true
+
+# Extensions — health check endpoint
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+# Service — wire receivers → processors → exporters thành pipelines
+service:
+  extensions: [health_check, pprof]
+  pipelines:
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus]
+
+    # Logs pipeline
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [loki, debug]
+
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/jaeger, debug]
