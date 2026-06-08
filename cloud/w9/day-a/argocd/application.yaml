@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx-gitops
+  namespace: argocd
+spec:
+  project: default
+
+  # Source: Git repo + path chứa manifests
+  source:
+    repoURL: https://github.com/NamHoang4268/namhoang-aws-accelerator-p2
+    targetRevision: main
+    path: cloud/w9/day-a/argocd
+
+  # Destination: deploy vào cluster nào, namespace nào
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hello-w9
+
+  # Sync policy: tự động sync khi có commit mới
+  syncPolicy:
+    automated:
+      prune: true      # xóa resource không còn trong Git
+      selfHeal: true   # tự fix nếu ai đó sửa tay trên cluster
+    syncOptions:
+    - CreateNamespace=true  # tự tạo namespace nếu chưa có
