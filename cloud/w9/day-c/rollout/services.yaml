@@ -1,0 +1,29 @@
+# Services cho Canary deployment
+# Cần 2 service riêng: stable và canary
+# Argo Rollouts tự điều chỉnh selector để route đúng traffic
+
+# Service cho stable pods (phiên bản cũ)
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-w9-stable-svc
+  namespace: hello-w9
+spec:
+  selector:
+    app: hello-w9
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# Service cho canary pods (phiên bản mới đang test)
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-w9-canary-svc
+  namespace: hello-w9
+spec:
+  selector:
+    app: hello-w9
+  ports:
+  - port: 80
+    targetPort: 80

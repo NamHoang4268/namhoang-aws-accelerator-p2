@@ -1,0 +1,95 @@
+# AnalysisTemplate — định nghĩa cách đánh giá canary
+# Argo Rollouts chạy Analysis trong khi canary đang deploy
+# Nếu metric thỏa điều kiện → tiếp tục
+# Nếu không → abort tự động (rollback về stable)
+
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: hello-w9-success-rate
+  namespace: hello-w9
+spec:
+  # Args có thể được truyền vào từ Rollout
+  args:
+  - name: service-name
+    value: hello-w9-canary-svc
+
+  metrics:
+  # ─── Metric 1: Success Rate (Availability SLO) ───────────────────────────
+  - name: success-rate
+    # Interval: query Prometheus mỗi 30 giây
+    interval: 30s
+    # Count: chạy 5 lần evaluation liên tiếp
+    count: 5
+    # SuccessCondition: phải thỏa mới là "pass"
+    successCondition: result[0] >= 0.95   # >= 95% success rate
+    # FailureLimit: cho phép fail tối đa 1 lần trước khi abort
+    failureLimit: 1
+
+    provider:
+      prometheus:
+        # Trỏ vào Prometheus trong cluster
+        address: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+        # Query tính success rate của canary
+        query: |
+          sum(
+            rate(
+              http_requests_total{
+                service="hello-w9-canary-svc",
+                status!~"5.."
+              }[5m]
+            )
+          )
+          /
+          sum(
+            rate(
+              http_requests_total{
+                service="hello-w9-canary-svc"
+              }[5m]
+            )
+          )
+
+  # ─── Metric 2: Latency P99 (Latency SLO) ────────────────────────────────
+  - name: latency-p99
+    interval: 30s
+    count: 5
+    # P99 latency phải dưới 500ms
+    successCondition: result[0] <= 0.5
+    failureLimit: 1
+
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          histogram_quantile(
+            0.99,
+            sum(
+              rate(
+                http_request_duration_seconds_bucket{
+                  service="hello-w9-canary-svc"
+                }[5m]
+              )
+            ) by (le)
+          )
+
+  # ─── Metric 3: Burn Rate (tích hợp với SLO từ Day B) ────────────────────
+  # Abort nếu canary đang burn error budget quá nhanh
+  - name: burn-rate
+    interval: 30s
+    count: 3
+    # Burn rate phải dưới 2× (không tiêu budget quá nhanh)
+    successCondition: result[0] <= 2
+    failureLimit: 0   # không cho phép fail lần nào — abort ngay nếu burn rate cao
+
+    provider:
+      prometheus:
+        address: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          (
+            sum(rate(http_requests_total{service="hello-w9-canary-svc", status=~"5.."}[1h]))
+            /
+            sum(rate(http_requests_total{service="hello-w9-canary-svc"}[1h]))
+          ) / 0.005
+          # 0.005 = error budget (1 - 0.995 SLO target)
+          # Kết quả > 1 = đang burn budget
+          # Kết quả > 14.4 = critical (từ Day B)
