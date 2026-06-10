@@ -99,4 +99,49 @@ GitOps:    Developer → git push → ArgoCD → Cluster
 
 ## Day C — Progressive Delivery (Canary)
 
-_(sẽ cập nhật sau khi hoàn thành)_
+### Những gì đã làm
+
+- Cài **Argo Rollouts controller** vào cluster (namespace `argo-rollouts`) — bao gồm 4 CRDs: `rollouts`, `analysistemplates`, `analysisruns`, `experiments`
+- Viết **Rollout CRD** (`day-c/rollout/rollout.yaml`) — thay thế Deployment thông thường, cấu hình canary strategy với 8 steps (20% → 40% → 60% → 80% → 100%), mỗi bước pause 60 giây
+- Viết **Services** (`day-c/rollout/services.yaml`) — 2 services riêng biệt: `hello-w9-stable-svc` và `hello-w9-canary-svc` để Argo Rollouts route traffic đúng
+- Viết **AnalysisTemplate** (`day-c/analysis-template/analysis-template.yaml`) — 3 metrics đánh giá canary:
+  - `success-rate`: tỉ lệ request thành công ≥ 95%
+  - `latency-p99`: P99 latency ≤ 500ms
+  - `burn-rate`: burn rate ≤ 2× (tích hợp với SLO từ Day B)
+- Verify Rollout chạy healthy: 5 pods Running, revision:1 stable
+
+### Concepts nắm được
+
+**Canary deployment là gì?**
+Thay vì deploy thẳng 100% traffic vào version mới (rủi ro cao), canary gửi dần dần: 20% → 40% → ... Nếu metric tốt thì tiếp tục, nếu tệ thì abort tự động về version cũ.
+
+**Rollout CRD vs Deployment:**
+- `Deployment` (apps/v1): deploy all-or-nothing, không có automated analysis
+- `Rollout` (argoproj.io/v1alpha1): có strategy steps, tích hợp AnalysisTemplate, tự động abort nếu metric fail
+
+**AnalysisTemplate và abort criteria:**
+- AnalysisTemplate định nghĩa cách query Prometheus để đánh giá canary
+- `successCondition` — điều kiện để metric được coi là "pass"
+- `failureLimit` — số lần fail cho phép trước khi abort
+- `failureLimit: 0` cho burn rate — bất kỳ vi phạm nào cũng abort ngay
+
+**Tích hợp với burn rate (Day B):**
+```
+AnalysisTemplate query Prometheus:
+error_rate_1h / error_budget (0.005)
+→ burn rate > 2× → abort canary ngay
+→ đảm bảo canary không làm cạn error budget
+```
+
+### Vấn đề gặp phải
+
+- Argo Rollouts pod bị Error (`connection refused` tới API server) sau khi restart minikube → delete pod để K8s recreate
+- `kubectl argo rollouts set image` timeout do kubeconfig stale (TLS handshake timeout)
+- Plugin `kubectl-argo-rollouts` cho Windows không download được qua curl (bị redirect thành 9-byte HTML) → cần download thủ công qua browser
+- Network isolation giữa WSL Ubuntu và minikube Docker network gây khó khăn khi dùng kubectl từ Ubuntu
+
+### Câu hỏi còn mở
+
+- AnalysisTemplate với `failureLimit: 0` có quá strict không? Production thường dùng giá trị bao nhiêu?
+- Khi canary abort, traffic có về 0% ngay lập tức hay theo steps ngược?
+- Flagger (alternative của Argo Rollouts) khác gì? Khi nào nên dùng cái nào?
