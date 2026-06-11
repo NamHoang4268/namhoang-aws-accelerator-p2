@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+    name: api-alerts
+    namespace: demo
+    labels:
+        release: kube-prometheus-stack # Bắt buộc có nhãn này để Prometheus Operator tự load
+spec:
+    groups:
+        - name: api-slo
+          rules:
+              - alert: ApiHighErrorRate
+                expr: |
+                    sum(rate(flask_http_request_duration_seconds_count{status=~"5..", job="api"}[1m]))
+                    /
+                    sum(rate(flask_http_request_duration_seconds_count{job="api"}[1m])) >= 0.05
+                for: 1m
+                labels:
+                    severity: critical
+                annotations:
+                    summary: "API High Error Rate Alert"
+                    description: "API HTTP 5xx error rate has exceeded 5% for the last 1 minute (current value: {{ $value }})."

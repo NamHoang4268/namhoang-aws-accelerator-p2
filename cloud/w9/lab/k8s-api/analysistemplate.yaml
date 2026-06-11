@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+    name: api-success-rate
+    namespace: demo
+spec:
+    metrics:
+        - name: success-rate
+          interval: 10s
+          count: 6 # Thực hiện 6 lần kiểm tra (tổng cộng 60 giây) trước khi kết luận thành công
+          successCondition: result[0] >= 0.95
+          failureLimit: 1
+          provider:
+              prometheus:
+                  address: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+                  query: |
+                      1 - (
+                        sum(rate(flask_http_request_duration_seconds_count{status=~"5..", job="api"}[1m]))
+                        /
+                        sum(rate(flask_http_request_duration_seconds_count{job="api"}[1m]))
+                      ) or vector(1)
