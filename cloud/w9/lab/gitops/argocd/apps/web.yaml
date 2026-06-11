@@ -8,7 +8,7 @@ spec:
     source:
         repoURL: https://github.com/NamHoang4268/namhoang-aws-accelerator-p2
         targetRevision: main
-        path: lab/gitops/k8s # folder chứa manifest của app web
+        path: cloud/w9/lab/gitops/k8s # folder chứa manifest của app web
     destination:
         server: https://kubernetes.default.svc
         namespace: demo

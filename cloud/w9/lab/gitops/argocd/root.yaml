@@ -8,7 +8,7 @@ spec:
     source:
         repoURL: https://github.com/NamHoang4268/namhoang-aws-accelerator-p2
         targetRevision: main
-        path: lab/gitops/argocd/apps # folder chứa các Application con
+        path: cloud/w9/lab/gitops/argocd/apps # folder chứa các Application con
     destination:
         server: https://kubernetes.default.svc
         namespace: argocd # Application con cũng tạo trong namespace argocd
