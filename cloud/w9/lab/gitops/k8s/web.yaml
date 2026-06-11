@@ -1,0 +1,52 @@
+# ConfigMap — wave 0: phải có trước Deployment đọc envFrom
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: web-config
+    namespace: demo
+    annotations:
+        argocd.argoproj.io/sync-wave: "0"
+data:
+    MESSAGE: "hello from gitops"
+---
+# Deployment — wave 1: chờ ConfigMap ở wave 0 ready
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: web
+    namespace: demo
+    annotations:
+        argocd.argoproj.io/sync-wave: "1"
+spec:
+    replicas: 2
+    selector:
+        matchLabels:
+            app: web
+    template:
+        metadata:
+            labels:
+                app: web
+        spec:
+            containers:
+                - name: web
+                  image: nginx:1.27
+                  ports:
+                      - containerPort: 80
+                  envFrom:
+                      - configMapRef:
+                            name: web-config # đọc MESSAGE từ ConfigMap
+---
+# Service — wave 2: expose sau khi Deployment ở wave 1 ready
+apiVersion: v1
+kind: Service
+metadata:
+    name: web
+    namespace: demo
+    annotations:
+        argocd.argoproj.io/sync-wave: "2"
+spec:
+    selector:
+        app: web
+    ports:
+        - port: 80
+          targetPort: 80

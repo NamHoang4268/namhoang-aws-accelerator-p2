@@ -105,9 +105,9 @@ GitOps:    Developer → git push → ArgoCD → Cluster
 - Viết **Rollout CRD** (`day-c/rollout/rollout.yaml`) — thay thế Deployment thông thường, cấu hình canary strategy với 8 steps (20% → 40% → 60% → 80% → 100%), mỗi bước pause 60 giây
 - Viết **Services** (`day-c/rollout/services.yaml`) — 2 services riêng biệt: `hello-w9-stable-svc` và `hello-w9-canary-svc` để Argo Rollouts route traffic đúng
 - Viết **AnalysisTemplate** (`day-c/analysis-template/analysis-template.yaml`) — 3 metrics đánh giá canary:
-  - `success-rate`: tỉ lệ request thành công ≥ 95%
-  - `latency-p99`: P99 latency ≤ 500ms
-  - `burn-rate`: burn rate ≤ 2× (tích hợp với SLO từ Day B)
+    - `success-rate`: tỉ lệ request thành công ≥ 95%
+    - `latency-p99`: P99 latency ≤ 500ms
+    - `burn-rate`: burn rate ≤ 2× (tích hợp với SLO từ Day B)
 - Verify Rollout chạy healthy: 5 pods Running, revision:1 stable
 
 ### Concepts nắm được
@@ -116,16 +116,19 @@ GitOps:    Developer → git push → ArgoCD → Cluster
 Thay vì deploy thẳng 100% traffic vào version mới (rủi ro cao), canary gửi dần dần: 20% → 40% → ... Nếu metric tốt thì tiếp tục, nếu tệ thì abort tự động về version cũ.
 
 **Rollout CRD vs Deployment:**
+
 - `Deployment` (apps/v1): deploy all-or-nothing, không có automated analysis
 - `Rollout` (argoproj.io/v1alpha1): có strategy steps, tích hợp AnalysisTemplate, tự động abort nếu metric fail
 
 **AnalysisTemplate và abort criteria:**
+
 - AnalysisTemplate định nghĩa cách query Prometheus để đánh giá canary
 - `successCondition` — điều kiện để metric được coi là "pass"
 - `failureLimit` — số lần fail cho phép trước khi abort
 - `failureLimit: 0` cho burn rate — bất kỳ vi phạm nào cũng abort ngay
 
 **Tích hợp với burn rate (Day B):**
+
 ```
 AnalysisTemplate query Prometheus:
 error_rate_1h / error_budget (0.005)

@@ -1,0 +1,24 @@
+name: validate
+
+on:
+    pull_request:
+        paths:
+            - "lab/gitops/k8s/**" # chỉ chạy khi file manifest thay đổi, tránh tốn GitHub Actions minutes
+
+jobs:
+    validate:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install kubeconform
+              run: |
+                  curl -sSLo kc.tgz https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz
+                  tar -xzf kc.tgz && sudo mv kubeconform /usr/local/bin/
+
+            - name: Validate K8s manifests
+              run: |
+                  kubeconform -strict -summary lab/gitops/k8s/
+                  # -strict: báo lỗi nếu có field không hợp lệ theo schema
+                  # -summary: in tổng kết số file pass/fail
+                  # KHÔNG apply vào cluster — chỉ validate syntax và schema

@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: root
+    namespace: argocd
+spec:
+    project: default
+    source:
+        repoURL: https://github.com/NamHoang4268/namhoang-aws-accelerator-p2
+        targetRevision: main
+        path: lab/gitops/argocd/apps # folder chứa các Application con
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd # Application con cũng tạo trong namespace argocd
+    syncPolicy:
+        automated:
+            prune: true # xóa Application con khi file bị xóa khỏi folder apps/
+            selfHeal: true
