@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+    name: api
+    namespace: argocd
+spec:
+    project: default
+    source:
+        repoURL: https://github.com/NamHoang4268/namhoang-aws-accelerator-p2
+        targetRevision: main
+        path: cloud/w9/lab/k8s-api # Thư mục chứa manifests k8s của app api
+    destination:
+        server: https://kubernetes.default.svc
+        namespace: demo
+    syncPolicy:
+        automated:
+            prune: true
+            selfHeal: true
+        syncOptions:
+            - CreateNamespace=true
