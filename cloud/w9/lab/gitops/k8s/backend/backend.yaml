@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        # httpd là Apache HTTP server — dùng làm backend giả lập
+        # trả về response đơn giản để test kết nối frontend -> backend
+        image: httpd:2.4
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: demo
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
