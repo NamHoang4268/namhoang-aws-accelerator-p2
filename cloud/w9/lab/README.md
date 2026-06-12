@@ -1,44 +1,38 @@
-# W9 Lab — GitOps-ify cụm (Day A + Day B + Day C)
+# W9 Lab — GitOps, Observability, and Progressive Delivery
 
-Bài lab này xây dựng theo từng phần, tương ứng từng ngày của tuần W9.
+Bài lab này hướng dẫn xây dựng một hệ thống CI/CD hoàn chỉnh với GitOps, cấu hình giám sát, cảnh báo tự động và triển khai theo chiến lược Canary. Xuyên suốt các bài lab, bạn sẽ cấu hình hệ thống từ những bước cơ bản nhất đến lúc hệ thống có khả năng tự động hóa việc đưa ra các quyết định rollback khi có sự cố.
 
-## Cấu trúc
+## Cấu trúc Repository
 
-```
+```text
 lab/
-├── README.md                    # file này — tổng quan và tiến độ
-├── gitops/                      # Day A — GitOps với ArgoCD
+├── README.md                    # File hướng dẫn (bạn đang đọc)
+├── gitops/                      # Thư mục chứa cấu hình GitOps
 │   ├── k8s/                     # Kubernetes manifests (nguồn sự thật)
-│   │   ├── namespace.yaml       # wave -1: tạo namespace demo
-│   │   ├── web.yaml             # wave 0,1,2: ConfigMap + Deployment + Service
+│   │   ├── namespace.yaml       # Tạo namespace demo
+│   │   ├── web.yaml             # Manifest cho ứng dụng web (ConfigMap, Deploy, Service)
+│   │   ├── api.yaml             # Manifest cho ứng dụng api (Argo Rollouts, Service)
+│   │   ├── prometheusrule.yaml  # Các rule SLO cảnh báo lỗi
+│   │   ├── servicemonitor.yaml  # Thu thập metrics cho Prometheus
+│   │   ├── alertmanagerconfig.yaml # Cấu hình gửi email cảnh báo
+│   │   └── analysistemplate.yaml   # Cấu hình tự động phân tích cho Rollout Canary
 │   ├── argocd/
-│   │   ├── apps/
-│   │   │   └── web.yaml         # ArgoCD Application cho app web
-│   │   └── root.yaml            # Root Application (app-of-apps)
+│   │   ├── apps/                # Các Application con
+│   │   └── root.yaml            # Root Application (Mô hình App-of-apps)
 │   └── .github/
 │       └── workflows/
-│           └── validate.yml     # CI: validate manifest khi có PR
+│           └── validate.yml     # CI workflow: Validate manifest khi có Pull Request
 ```
 
-## Tiến độ
+## Điều kiện tiên quyết (Prerequisite)
 
-- [x] Day A — GitOps: ArgoCD, app-of-apps, sync waves, CI validate
-- [ ] Day B — Observability: Prometheus, Grafana, Loki, Alert rules
-- [ ] Day C — Progressive Delivery: Argo Rollouts, Canary, AnalysisTemplate
-
-## Prerequisite
-
-- Docker đang chạy
-- `minikube` đã cài
-- `kubectl` đã cài
-- `git` đã cài
-- Có 1 repo GitHub trống (đặt tên `gitops`)
+- Docker đang chạy.
+- `minikube`, `kubectl`, `git` đã cài đặt trên máy.
+- Có 1 repo GitHub trống để thực hành.
 
 ---
 
-# Day A — GitOps
-
-## Lab 0 — Tạo cụm + repo
+## Lab 0 — Khởi tạo Cụm và Repository
 
 ```bash
 # 1. Tạo cụm local với driver docker
@@ -46,161 +40,160 @@ minikube start -p w9 --driver=docker
 kubectl config use-context w9
 kubectl get nodes   # STATUS phải là Ready
 
-# 2. Clone repo này về local (hoặc tạo repo mới)
-# Nếu dùng repo mới:
+# 2. Khởi tạo repository cục bộ và đưa lên Github
 mkdir gitops && cd gitops
 git init
 git branch -M main
 git remote add origin https://github.com/<ban>/gitops.git
 ```
 
-Xong khi: node `w9` ở trạng thái Ready.
+_Điều kiện hoàn thành:_ Node `w9` ở trạng thái Ready.
 
 ---
 
-## Lab 1 — Cài ArgoCD vào cụm
+## Lab 1 — Cài đặt ArgoCD vào Cụm
 
 ```bash
 kubectl create ns argocd
 
-# --server-side cần thiết vì CRD của ArgoCD lớn hơn 256KB
-# kubectl apply thông thường lưu config vào annotation, bị vượt giới hạn
-kubectl apply --server-side -n argocd \
-  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# Cài đặt ArgoCD qua server-side apply (do kích thước CRD lớn)
+kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 # Đợi ArgoCD sẵn sàng
 kubectl -n argocd rollout status deploy/argocd-server
-kubectl -n argocd get pods   # tất cả argocd-* phải Running
+kubectl -n argocd get pods   # Tất cả argocd-* phải Running
 
-# Lấy password admin mặc định
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath='{.data.password}' | base64 -d; echo
+# Lấy mật khẩu admin mặc định
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 
-# Mở UI (optional)
+# (Tùy chọn) Port-forward để truy cập ArgoCD UI
 kubectl -n argocd port-forward svc/argocd-server 8080:443 &
-# Truy cập: https://localhost:8080 — login: admin / <password vừa lấy>
+# Truy cập: https://localhost:8080 — username: admin
 ```
-
-Xong khi: tất cả pod `argocd-*` ở trạng thái Running.
 
 ---
 
-## Lab 2 — Tạo Application → ArgoCD tự sync
-
-Apply Application bằng tay (lần duy nhất dùng kubectl tạo app):
+## Lab 2 — Triển khai Ứng dụng đầu tiên qua GitOps
 
 ```bash
-# Sửa repoURL trong file argocd/apps/web.yaml trước
-# Thay <ban> bằng username GitHub của bạn
+# Sửa repoURL trong file argocd/apps/web.yaml trỏ về repo GitHub của bạn.
+# Apply thủ công lần duy nhất để báo cho ArgoCD biết về ứng dụng này:
 kubectl apply -f gitops/argocd/apps/web.yaml
 
-# Verify
-kubectl -n argocd get app web     # Synced / Healthy
-kubectl -n demo get deploy,pod    # 2 pod web đang Running
+# Kiểm tra kết quả
+kubectl -n argocd get app web     # Phải báo Synced / Healthy
+kubectl -n demo get deploy,pod    # Các pod ứng dụng web đang Running
 ```
-
-ArgoCD đọc `k8s/` từ Git và tự apply vào cluster. Bạn không chạy `kubectl apply` cho app web.
-
-Xong khi: app `web` = Synced/Healthy trong ArgoCD, 2 pod Running trong namespace `demo`.
 
 ---
 
-## Lab 3 — GitOps Loop + Self-heal
+## Lab 3 — GitOps Loop & Self-Heal (Tự động đồng bộ và Tự chữa lành)
+
+Kiểm tra cơ chế đồng bộ tự động và tự động phục hồi của GitOps:
 
 ```bash
-# Test GitOps loop: sửa replicas qua Git, không kubectl
-# Mở gitops/k8s/web.yaml, đổi replicas: 2 → 4
-git commit -am "scale web 2->4"
-git push
-# Đợi ~3 phút (polling) hoặc Refresh trong ArgoCD UI
-kubectl -n demo get deploy web   # DESIRED phải là 4
+# 1. Thay đổi số lượng replicas qua Git (không dùng kubectl)
+# Mở gitops/k8s/web.yaml, đổi replicas thành 4. Commit và push.
+# ArgoCD sẽ tự động nhận diện drift và scale lên 4 pod sau vài phút.
 
-# Test self-heal: sửa tay trên cluster
+# 2. Kiểm tra Self-Heal bằng cách cố tình sửa tay trên cluster:
 kubectl -n demo scale deploy/web --replicas=9
-kubectl -n demo get deploy web -w
-# Vài giây sau ArgoCD phát hiện drift và kéo về 4 (theo Git)
+# Vài giây sau, ArgoCD sẽ phát hiện sự khác biệt và tự động scale về lại đúng số lượng trên Git.
 ```
-
-Điều cần thấy: sửa tay không tồn tại được. Cluster luôn về trạng thái Git định nghĩa.
 
 ---
 
-## Lab 4 — Rollback bằng git revert
+## Lab 4 — Rollback ứng dụng
+
+Trong kiến trúc GitOps, chúng ta không dùng `kubectl rollout undo` vì ArgoCD sẽ tự động ghi đè lại. Cách chuẩn xác là sử dụng git:
 
 ```bash
 git revert HEAD --no-edit && git push
-# ArgoCD sync cụm về trạng thái commit cũ
-
-# Verify rollback thật sự
-kubectl -n demo get deploy web   # replicas về 2
+# ArgoCD sẽ tự đồng bộ cluster về trạng thái cấu hình của commit trước đó.
 ```
-
-Điểm quan trọng: `kubectl rollout undo` không hoạt động trong GitOps vì ArgoCD
-self-heal sẽ overwrite lại sau vài phút. Rollback đúng cách là `git revert`.
 
 ---
 
-## Lab 5 — App-of-Apps
+## Lab 5 — Mô hình App-of-Apps
 
-Apply root Application — lần cuối dùng kubectl tạo app:
+Triển khai Root Application để quản lý tất cả các ứng dụng khác. Từ nay về sau, toàn bộ quá trình CI/CD hoàn toàn thông qua Git.
 
 ```bash
-# Sửa repoURL trong gitops/argocd/root.yaml trước
-git add gitops/argocd/root.yaml && git commit -m "app-of-apps root"
-git push
-
+# Cập nhật repoURL trong gitops/argocd/root.yaml, commit và push.
 kubectl apply -f gitops/argocd/root.yaml
 
-# Verify
-kubectl -n argocd get applications   # phải thấy: root + web
+# Kiểm tra
+kubectl -n argocd get applications   # Phải thấy cả ứng dụng `root` và `web`
 ```
 
-Từ đây để thêm app mới: chỉ cần thêm file vào `argocd/apps/` và push. Root tự phát hiện và tạo Application con. Không cần `kubectl apply` nữa.
+Từ đây, để thêm các app mới (như api, frontend, v.v.), chỉ cần thêm file cấu hình vào `argocd/apps/` trên Git. Root app sẽ tự động phát hiện và sinh ra app con mà không cần chạy bất kỳ câu lệnh `kubectl` nào nữa.
 
 ---
 
-## Lab 6 — Sync Waves
+## Lab 6 — Đồng bộ theo thứ tự (Sync Waves)
 
-Sync waves đã được cấu hình sẵn trong `k8s/namespace.yaml` và `k8s/web.yaml`:
-
-```
-Namespace (wave -1) → ConfigMap (wave 0) → Deployment (wave 1) → Service (wave 2)
-```
-
-```bash
-git add gitops/k8s/ && git commit -m "add namespace + sync waves"
-git push
-# Quan sát trong ArgoCD UI: tab Sync → thấy resource apply đúng thứ tự
-```
-
-Nếu thiếu sync waves: Deployment chạy trước khi ConfigMap tồn tại → pod lỗi
-`CreateContainerConfigError`.
+Sử dụng Sync Waves để đảm bảo các tài nguyên được tạo theo đúng thứ tự, tránh lỗi phụ thuộc chéo (ví dụ: Deployment chạy trước khi có Namespace hoặc ConfigMap).
+Thứ tự đã được cấu hình trong `web.yaml`:
+`Namespace (wave -1) → ConfigMap (wave 0) → Deployment (wave 1) → Service (wave 2)`
 
 ---
 
-## Lab 7 — CI: validate manifest khi có PR
+## Lab 7 — CI Validate với GitHub Actions
 
-```bash
-git add gitops/.github/ && git commit -m "add CI validate workflow"
-git push
-```
+Thêm workflow kiểm tra tính hợp lệ của Kubernetes manifests trước khi cho phép Merge code.
 
-Sau đó vào GitHub Settings → Branches → Add rule cho `main`:
-
-- Require a pull request before merging
-- Require status checks to pass → chọn `validate`
-
-Thử: tạo PR với manifest sai schema → job `validate` fail → nút Merge bị khóa.
+- File `.github/workflows/validate.yml` định nghĩa các bước CI để kiểm tra lỗi.
+- Trên GitHub: Settings → Branches → Add rule cho branch `main`, yêu cầu trạng thái check `validate` phải vượt qua thành công.
 
 ---
 
-## Kết quả Day A
+## Lab 8 — Giám sát & Cảnh báo (Observability & Alerting)
 
-Cluster đã được GitOps-managed hoàn toàn:
+Cấu hình hệ thống tự động giám sát và gửi thông báo khi dịch vụ gặp sự cố, đảm bảo phản ứng nhanh trước các lỗi.
 
-- Git là nguồn sự thật duy nhất
-- ArgoCD tự sync mọi thay đổi
-- Rollback bằng `git revert`
-- App-of-apps: thêm app mới chỉ cần thêm file + push
-- Sync waves đảm bảo thứ tự deploy đúng
-- CI validate manifest trước khi merge
+1. **Thu thập metrics:** File `servicemonitor.yaml` cấu hình cho Prometheus tự động cào metrics từ `/metrics` của dịch vụ `api`. _(Lưu ý: Phải có label `release: kube-prometheus-stack`)_
+2. **Cảnh báo SLO:** File `prometheusrule.yaml` phát sinh cảnh báo `ApiHighErrorRate` nếu tỉ lệ lỗi HTTP 5xx >= 5% trong 1 phút liên tục.
+3. **Định tuyến gửi Email:** File `alertmanagerconfig.yaml` quy định việc gửi email cảnh báo thông qua Gmail SMTP.
+    - _Về bảo mật mật khẩu:_ Cần tạo Secret lưu mật khẩu email trực tiếp trên cluster, thay vì đưa lên Git công khai:
+    ```bash
+    kubectl create secret generic alertmanager-smtp-password --from-literal=password="<GMAIL_APP_PASSWORD>" -n demo
+    ```
+
+---
+
+## Lab 9 — Tự động hóa quá trình phát hành ứng dụng (Progressive Delivery & Canary)
+
+Sử dụng Argo Rollouts để phát hành phiên bản mới. Quá trình chia traffic theo các bước, kiểm tra sức khoẻ tự động (Analysis) và tự động hủy lùi version (Auto-Abort) nếu phát hiện lỗi.
+
+1. **Sử dụng tài nguyên Rollout:** File `api.yaml` sử dụng `Rollout` thay cho `Deployment` thông thường. Chiến lược Canary được cấu hình gồm các bước:
+    - Chuyển 25% traffic -> Chạy phân tích (AnalysisRun) -> Tăng lên 50% traffic -> Tạm dừng (Pause) -> 100% traffic.
+2. **Đánh giá tự động (AnalysisTemplate):** File `analysistemplate.yaml` truy vấn Prometheus lấy metric `api-success-rate`. Nếu tỉ lệ lỗi >= 5% dù chỉ xuất hiện 1 lần trong 6 lượt kiểm tra (60s), đợt Rollout lập tức bị đánh rớt (Failed).
+3. **Kiểm thử Kịch bản Canary lỗi (Auto-Abort):**
+    - Thay đổi cấu hình đẩy lên Git với `ERROR_RATE: "0.5"` (50% requests bị lỗi) và cập nhật phiên bản `VERSION: "v6"`.
+    - Sinh traffic giả lập chạy ngầm:
+        ```powershell
+        1..200 | ForEach-Object { Invoke-RestMethod -Uri "http://localhost:9000" -Method Get; Start-Sleep -Milliseconds 100 }
+        ```
+    - Argo Rollout phát hiện lỗi qua Prometheus, tiến trình phân tích thất bại, nó sẽ tự động **Abort** bản v6 và điều hướng 100% traffic an toàn về lại bản cũ. Bạn đồng thời sẽ nhận được cảnh báo qua email.
+
+---
+
+## 🛠️ Phụ lục: Xử lý sự cố phần cứng máy tính giới hạn (8GB RAM)
+
+Khi chạy toàn bộ các stack trên (ArgoCD, Prometheus, Alertmanager, App...) trên máy cá nhân có 8GB RAM, Minikube rất dễ bị quá tải tài nguyên (CPU/RAM). Điều này dẫn đến việc `prometheus` hoặc `prometheus-operator` liên tục bị `CrashLoopBackOff` (không đủ khả năng phản hồi Liveness/Readiness probe kịp thời).
+
+**Giải pháp để duy trì cụm ổn định khi test Lab 8 và Lab 9:**
+Giảm tải các ứng dụng sinh ra từ các bài Lab cũ không còn cần thiết cho việc test.
+
+```powershell
+# 1. Tắt tính năng tự chữa lành (Self-Heal) của ArgoCD đối với các app này
+# (Tránh việc ArgoCD tự động kéo các pod về lại trạng thái lúc trước)
+kubectl patch app backend -n argocd --type merge -p '{"spec":{"syncPolicy":null}}'
+kubectl patch app frontend -n argocd --type merge -p '{"spec":{"syncPolicy":null}}'
+kubectl patch app web -n argocd --type merge -p '{"spec":{"syncPolicy":null}}'
+
+# 2. Thu gọn số lượng pod của các app phụ về 0 để giải phóng hoàn toàn RAM
+kubectl scale deploy/backend deploy/frontend deploy/web --replicas=0 -n demo
+```
+
+Việc này sẽ giúp nhường không gian cho Prometheus chạy mượt mà, phân tích metrics không bị gián đoạn và quá trình tự động Abort/Promote được diễn ra trơn tru nhất có thể.
