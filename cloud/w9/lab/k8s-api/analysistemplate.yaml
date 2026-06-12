@@ -7,9 +7,9 @@ spec:
     metrics:
         - name: success-rate
           interval: 10s
-          count: 6 # Thực hiện 6 lần kiểm tra (tổng cộng 60 giây) trước khi kết luận thành công
+          count: 10 # Thực hiện 6 lần kiểm tra (tổng cộng 60 giây) trước khi kết luận thành công
           successCondition: result[0] >= 0.95
-          failureLimit: 5
+          failureLimit: 2
           provider:
               prometheus:
                   address: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
