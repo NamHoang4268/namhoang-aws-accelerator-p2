@@ -7,9 +7,9 @@ spec:
     metrics:
         - name: success-rate
           interval: 10s
-          count: 10 # Thực hiện 6 lần kiểm tra (tổng cộng 60 giây) trước khi kết luận thành công
+          count: 10   # 10 lần x 10s = 100 giây tổng, đủ để alert gửi email trước khi abort
           successCondition: result[0] >= 0.95
-          failureLimit: 2
+          failureLimit: 2   # lần thứ 3 fail = abort, ~30s đủ để prometheusrule fire (for: 10s)
           provider:
               prometheus:
                   address: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
@@ -18,4 +18,6 @@ spec:
                         sum(rate(flask_http_request_duration_seconds_count{status=~"5..", job="api"}[1m]))
                         /
                         sum(rate(flask_http_request_duration_seconds_count{job="api"}[1m]))
-                      ) or vector(1)
+                      )
+                      # Bỏ "or vector(1)" để tránh pass giả khi chưa có traffic
+                      # Khi không có data, Analysis sẽ Inconclusive (lỗi) thay vì Pass
