@@ -8,13 +8,13 @@ spec:
     source:
         repoURL: https://github.com/NamHoang4268/namhoang-aws-accelerator-p2
         targetRevision: main
-        path: cloud/w9/lab/gitops/k8s # folder chứa manifest của app web
+        path: cloud/w9/lab/gitops/k8s
     destination:
         server: https://kubernetes.default.svc
         namespace: demo
     syncPolicy:
         automated:
-            prune: true # xóa resource khỏi cluster khi file bị xóa khỏi Git
-            selfHeal: true # tự kéo về Git nếu ai sửa tay trên cluster
+            prune: true
+            selfHeal: true
         syncOptions:
             - CreateNamespace=true

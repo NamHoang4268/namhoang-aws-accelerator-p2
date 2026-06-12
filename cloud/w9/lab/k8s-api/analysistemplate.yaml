@@ -7,9 +7,9 @@ spec:
     metrics:
         - name: success-rate
           interval: 10s
-          count: 10 # 10 lần x 10s = 100 giây tổng, đủ để alert gửi email trước khi abort
+          count: 10
           successCondition: result[0] >= 0.95
-          failureLimit: 7 # lần thứ 3 fail = abort, ~30s đủ để prometheusrule fire (for: 10s)
+          failureLimit: 2
           provider:
               prometheus:
                   address: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090

@@ -25,4 +25,4 @@ spec:
             selfHeal: true
         syncOptions:
             - CreateNamespace=true
-            - ServerSideApply=true # cần thiết vì Prometheus Operator CRDs rất lớn
+            - ServerSideApply=true
