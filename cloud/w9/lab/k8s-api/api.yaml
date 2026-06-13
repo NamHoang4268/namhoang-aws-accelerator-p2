@@ -26,7 +26,7 @@ spec:
                       - name: ERROR_RATE
                         value: "0.5"
                       - name: VERSION
-                        value: "v13"
+                        value: "v14"
                   readinessProbe:
                       httpGet:
                           path: /healthz
