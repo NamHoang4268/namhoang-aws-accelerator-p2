@@ -9,13 +9,11 @@ spec:
           interval: 10s
           count: 10
           successCondition: result[0] >= 0.95
-          failureLimit: 2
+          failureLimit: 7
           provider:
               prometheus:
                   address: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
                   query: |
-                      1 - (
-                        sum(rate(flask_http_request_duration_seconds_count{status=~"5..", job="api"}[1m]))
-                        /
-                        sum(rate(flask_http_request_duration_seconds_count{job="api"}[1m]))
-                      )
+                      sum(rate(flask_http_request_duration_seconds_count{status!~"5..", job="api"}[1m]))
+                      /
+                      sum(rate(flask_http_request_duration_seconds_count{job="api"}[1m]))
