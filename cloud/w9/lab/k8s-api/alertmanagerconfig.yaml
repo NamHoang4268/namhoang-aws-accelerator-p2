@@ -3,6 +3,8 @@ kind: AlertmanagerConfig
 metadata:
     name: email-alert-config
     namespace: monitoring
+    labels:
+        release: kube-prometheus-stack
 spec:
     route:
         groupBy: ["alertname"]
