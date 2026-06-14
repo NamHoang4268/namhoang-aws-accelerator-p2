@@ -6,9 +6,9 @@ metadata:
 spec:
     route:
         groupBy: ["alertname"]
-        groupWait: 10s
-        groupInterval: 1m
-        repeatInterval: 12h
+        groupWait: 30s
+        groupInterval: 5m
+        repeatInterval: 1h
         receiver: "gmail-receiver"
     receivers:
         - name: "gmail-receiver"
