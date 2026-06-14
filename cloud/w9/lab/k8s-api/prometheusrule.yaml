@@ -17,6 +17,7 @@ spec:
                 for: 10s
                 labels:
                     severity: critical
+                    namespace: monitoring
                 annotations:
                     summary: "API High Error Rate Alert"
                     description: "API HTTP 5xx error rate has exceeded 5% for the last 1 minute (current value: {{ $value }})."
