@@ -1,0 +1,39 @@
+# Role: developer — đọc + deploy trong namespace app-dev
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: developer
+  namespace: app-dev
+rules:
+- apiGroups: ["", "apps"]
+  resources: ["pods", "deployments", "services", "configmaps"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: [""]
+  resources: ["pods/log", "pods/exec"]
+  verbs: ["get", "list"]
+---
+# Role: sre — đọc toàn bộ cluster, xóa được pods bị lỗi
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sre
+rules:
+- apiGroups: ["", "apps", "batch"]
+  resources: ["pods", "deployments", "services", "nodes", "namespaces", "events"]
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["patch", "update"]
+---
+# ClusterRole: viewer — chỉ đọc, không thay đổi gì
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: viewer
+rules:
+- apiGroups: ["", "apps", "batch"]
+  resources: ["pods", "deployments", "services", "nodes", "namespaces", "configmaps"]
+  verbs: ["get", "list", "watch"]

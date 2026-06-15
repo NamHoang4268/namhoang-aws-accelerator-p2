@@ -1,0 +1,42 @@
+# Gán developer role cho sa-developer trong namespace app-dev
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developer-binding
+  namespace: app-dev
+subjects:
+- kind: ServiceAccount
+  name: sa-developer
+  namespace: app-dev
+roleRef:
+  kind: Role
+  name: developer
+  apiGroup: rbac.authorization.k8s.io
+---
+# Gán sre ClusterRole cho sa-sre toàn cluster
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sre-binding
+subjects:
+- kind: ServiceAccount
+  name: sa-sre
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: sre
+  apiGroup: rbac.authorization.k8s.io
+---
+# Gán viewer ClusterRole cho sa-viewer toàn cluster
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: viewer-binding
+subjects:
+- kind: ServiceAccount
+  name: sa-viewer
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: viewer
+  apiGroup: rbac.authorization.k8s.io
