@@ -13,7 +13,6 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-# ── IAM Role for CloudWatch Agent + SSM (không cần SSH) ───
 resource "aws_iam_role" "cw_agent_role" {
   name = "ec2-cw-agent-role-w9"
 
@@ -32,7 +31,6 @@ resource "aws_iam_role_policy_attachment" "cw_agent_policy" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
-# SSM cho phép vào EC2 qua AWS Console mà không cần SSH key
 resource "aws_iam_role_policy_attachment" "ssm_policy" {
   role       = aws_iam_role.cw_agent_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
@@ -43,13 +41,11 @@ resource "aws_iam_instance_profile" "cw_agent_profile" {
   role = aws_iam_role.cw_agent_role.name
 }
 
-# ── EC2 Instance (không cần key_name vì dùng SSM) ─────────
 resource "aws_instance" "cw_agent_lab" {
   ami                  = data.aws_ami.amazon_linux.id
   instance_type        = "t3.micro"
   iam_instance_profile = aws_iam_instance_profile.cw_agent_profile.name
 
-  # user_data chạy 4 bước cài agent ngay khi EC2 boot
   user_data = <<-EOF
     #!/bin/bash
     # Bước 1: Install Agent
