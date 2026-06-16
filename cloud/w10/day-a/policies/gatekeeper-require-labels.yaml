@@ -30,6 +30,7 @@ spec:
       }
 ---
 # Constraint: enforce labels 'app' và 'env' trên tất cả pods
+# Loại trừ system namespaces để không chặn platform tools (external-secrets, argocd, v.v.)
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sRequiredLabels
 metadata:
@@ -39,5 +40,15 @@ spec:
     kinds:
     - apiGroups: [""]
       kinds: ["Pod"]
+    excludedNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+    - gatekeeper-system
+    - external-secrets
+    - argocd
+    - argo-rollouts
+    - cert-manager
+    - monitoring
   parameters:
     labels: ["app", "env"]
