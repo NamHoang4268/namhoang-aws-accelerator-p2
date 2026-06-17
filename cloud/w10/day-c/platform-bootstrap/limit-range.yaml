@@ -1,0 +1,33 @@
+# LimitRange — đặt default và max/min resource cho từng container
+# Nếu pod không khai báo requests/limits, LimitRange tự động inject default
+apiVersion: v1
+kind: LimitRange
+metadata:
+    name: app-dev-limits
+    namespace: app-dev
+spec:
+    limits:
+        - type: Container
+          default: # default limits nếu container không khai báo
+              cpu: "500m"
+              memory: "256Mi"
+          defaultRequest: # default requests nếu container không khai báo
+              cpu: "100m"
+              memory: "128Mi"
+          max: # container không được vượt quá
+              cpu: "2"
+              memory: "1Gi"
+          min: # container phải có ít nhất
+              cpu: "50m"
+              memory: "64Mi"
+
+        - type: Pod
+          max: # tổng resource của tất cả containers trong 1 pod
+              cpu: "4"
+              memory: "2Gi"
+
+        - type: PersistentVolumeClaim
+          max:
+              storage: "10Gi" # PVC không được lớn hơn 10Gi
+          min:
+              storage: "1Gi"

@@ -67,3 +67,25 @@
 - Admission webhook verify signature (Kyverno/Gatekeeper) — lab chỉ verify manual, chưa enforce ở cluster level
 
 ## Day C — Platform Integration + Runbook + Cost Guard
+
+### Đã làm
+
+- Tạo `ResourceQuota` cho namespace `app-dev`: giới hạn tối đa 20 pods, 2 CPU request, 4Gi memory limit, 20 secrets/configmaps
+- Tạo `LimitRange` cho namespace `app-dev`: inject default `cpu: 100m/500m`, `memory: 128Mi/256Mi` cho pod không khai báo resources
+- Verify LimitRange hoạt động: pod tạo không có resources tự nhận default đúng
+- Viết `platform-bootstrap/README.md`: bootstrap guide toàn stack W8→W10 theo thứ tự 4 phase (< 2h từ repo)
+- Viết 2 runbooks: `pod-crashloopbackoff` + `secret-rotation-fail`
+- Viết `cost-anomaly-detection.md`: setup guide Cost Monitor + Alert Subscription trên AWS
+
+### Concepts nắm được
+
+- ResourceQuota kiểm soát **tổng** tài nguyên của namespace — ngăn một namespace chiếm hết cluster
+- LimitRange kiểm soát **từng** container/pod — inject default khi không khai báo, giới hạn max/min
+- Hai object bổ sung nhau: không có LimitRange thì pod không khai báo resources sẽ bị ResourceQuota block (vì requests = 0 không pass quota)
+- Runbook = bước điều tra và xử lý chuẩn hóa — giảm MTTR khi incident xảy ra lúc 3 giờ sáng
+- Cost Anomaly Detection alert theo threshold tuyệt đối hoặc phần trăm — kết hợp với GuardDuty để detect crypto mining attack
+
+### Câu hỏi còn mở
+
+- Chaos test (Litmus/Chaos Mesh) — announcement có nhắc nhưng chưa thực hành
+- Platform bootstrap chưa test end-to-end trên fresh cluster

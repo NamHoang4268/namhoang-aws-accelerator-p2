@@ -1,0 +1,21 @@
+# ResourceQuota — giới hạn tổng tài nguyên trong namespace
+# Ngăn một namespace "chiếm hết" tài nguyên cluster
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: app-dev-quota
+  namespace: app-dev
+spec:
+  hard:
+    # Compute resources
+    requests.cpu: "2"          # tổng CPU request của tất cả pods không vượt 2 cores
+    requests.memory: "2Gi"     # tổng memory request không vượt 2Gi
+    limits.cpu: "4"            # tổng CPU limit không vượt 4 cores
+    limits.memory: "4Gi"       # tổng memory limit không vượt 4Gi
+
+    # Object count limits
+    pods: "20"                 # tối đa 20 pods trong namespace
+    services: "10"             # tối đa 10 services
+    persistentvolumeclaims: "5" # tối đa 5 PVC
+    secrets: "20"              # tối đa 20 secrets
+    configmaps: "20"           # tối đa 20 configmaps
