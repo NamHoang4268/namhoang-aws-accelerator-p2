@@ -1,0 +1,7 @@
+aws_region    = "us-east-1"
+project_name  = "xbrain-macie"
+environment   = "dev"
+owner         = "ngokhoangnam4268@gmail.com"
+team          = "CD08"
+email_address = "ngokhoangnam4268@gmail.com"
+bucket_prefix = "xbrain-macie-sensitive-data"

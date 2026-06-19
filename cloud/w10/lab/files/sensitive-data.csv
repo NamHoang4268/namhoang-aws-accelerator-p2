@@ -1,0 +1,4 @@
+Name,Email,Phone,CreditCard,SSN,Address,Password
+Nguyen Van A,anguyen@email.com,0901234567,4111-2222-3333-4444,123-45-6789,123 Street HCM,mySecurePass123
+Tran Thi B,btran@email.com,0987654321,3782-8224-6310-0051,987-65-4321,456 Street HN,anotherSecret!
+John Doe,johndoe@example.com,1-555-867-5309,4012-8888-8888-1881,111-22-3333,789 Broad St NY,superHidden@99
